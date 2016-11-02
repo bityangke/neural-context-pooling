@@ -15,7 +15,7 @@ module load tools/conda
 
 # Safe activation of conda enviroment (overcome racing conditions ;))
 while true; do
-  source activate nueral-context-pooling
+  source activate neural-context-pooling
   if [ $? -eq 0 ]; then
     break;
   else

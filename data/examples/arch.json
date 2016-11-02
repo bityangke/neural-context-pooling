@@ -1,0 +1,32 @@
+{
+    "type": "conv",
+    "combo_list": [
+        [
+            {
+                "num_units": 16,
+                "filter_size": 3
+            }
+        ],
+        [
+            {
+                "num_units": 16,
+                "filter_size": 3
+            }
+        ]
+    ],
+    "after_combo": [
+        {"max-pool":
+            {
+                "pool_length": 2,
+                "stride": 1
+            }
+        },
+        {"max-pool":
+            {
+                "pool_length": 2,
+                "stride": 1
+            },
+         "flatten": true
+        }
+    ]
+}
