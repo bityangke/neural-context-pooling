@@ -1,5 +1,6 @@
 from keras.layers import Input, Conv1D, Dense, Flatten, MaxPooling1D
 from keras.models import Model, Sequential
+from keras import backend as K
 
 
 def neural_context_encoder(arch_prm, input_shape):
@@ -63,3 +64,17 @@ def neural_context_model(num_actions, receptive_field, arch_prm):
     model = Model(input=[input_src],
                   output=[output_prob, output_offsets])
     return model
+
+
+def set_learning_rate(model, lr_start):
+    """Set learning rate
+
+    Parameters
+    ----------
+    model : keras.model
+        Instance of keras model
+    lr_start : float
+        Initial learning rate value
+
+    """
+    K.set_value(model.optimizer.lr, lr_start)
