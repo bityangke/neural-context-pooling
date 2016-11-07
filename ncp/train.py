@@ -3,12 +3,16 @@ import inspect
 import json
 import os
 
+import h5py
 import numpy as np
 from keras.callbacks import (CSVLogger, EarlyStopping, ModelCheckpoint,
                              ProgbarLogger, ReduceLROnPlateau)
+from keras.utils.io_utils import HDF5Matrix
 
 from ncp.model import neural_context_model, set_learning_rate
+from ncp.utils import count_wraparound
 
+HDF5_DATASETS = ['X', 'output_prob', 'output_offsets']
 JSON_ARCH_EXAMPLE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'examples',
     'arch.json')
@@ -23,8 +27,14 @@ def input_parser(p=None):
     # Batch/Dataset parameters
     p.add_argument('-dh5', '--dataset-file', default='awesome-dataset.hdf5',
                    help='HDF5-file with dataset')
-    p.add_argument('-dbz', '--batch-size', default=1000, type=int,
-                   help='Batch size')
+    dmem_parser = p.add_mutually_exclusive_group(required=False)
+    dmem_parser.add_argument('-dim', '--in-memory', action='store_true',
+                             help='Dataset fits in memory')
+    dmem_parser.add_argument('-ndim', '--no-in-memory',
+                             dest='in_memory', action='store_false')
+    p.add_argument('-dbz', '--batch-size', nargs='+', default=[1000], type=int,
+                   help=('Batch size. Pass two values to different batch size '
+                         'in [training, validation].'))
     p.add_argument('-dts', '--train-samples', default=45000, type=int,
                    help='Number of training samples')
     p.add_argument('-dvs', '--validation-split', default=0.2, type=float,
@@ -55,6 +65,26 @@ def input_parser(p=None):
     return p
 
 
+def data_generator(X, Y_prob, Y_offsets, batch_size, n_samples=0):
+    """Data feeder
+
+    Parameters
+    ----------
+    X : ndarray, h5py, pandas, etc.
+    Y_prob : ndarray, h5py, pandas, etc.
+    Y_offsets : ndarray, h5py, pandas, etc.
+    batch_size : int
+    n_samples : int, optional
+
+    """
+    counter = count_wraparound(end=n_samples)
+    while True:
+        indexes = [counter.next() for i in xrange(batch_size)]
+        yield {'context_over_time': X[indexes, ...],
+               'output_prob': Y_prob[indexes, ...],
+               'output_offsets': Y_offsets[indexes, ...]}
+
+
 def initialize_logging(output_dir, frame,
                        remove_keys=['verbosity', 'args', 'kwargs']):
     """Create output_dir and save arguments as JSON file
@@ -79,8 +109,68 @@ def initialize_logging(output_dir, frame,
         json.dump(values, fid, sort_keys=True, indent=4)
 
 
-def load_dataset(filename, extra_args):
-    """Load dataset from HDF5-file
+def load_dataset_by_chunks(filename, batch_size, train_samples=None,
+                           validation_split=0.25, hdf5_datasets=HDF5_DATASETS):
+    """Load dataset in memory from HDF5-file
+
+    Parameters
+    ----------
+    filename : str
+        fullpath of hdf5 file
+    batch_size : iterable of int
+        Number of instances per batch (training, validation)
+    train_samples : int
+        Number or training samples
+    validation_split : float
+        Number/ratio of samples to use as validation set
+
+    Returns
+    -------
+    train_generator : generator
+    val_generator : generator
+    samples_per_training : int
+    samples_per_validation : int
+    metadata : tuple
+        Extra info about dataset (num-categories, receptive-field)
+
+    """
+    if os.path.exists(filename):
+        raise IOError('Unexistent file {}'.format(filename))
+    if len(batch_size) > 1:
+        train_batch_size, val_batch_size = batch_size[0:1]
+    else:
+        train_batch_size = val_batch_size = batch_size[0]
+
+    train_data = [HDF5Matrix(filename, i, end=train_samples)
+                  for i in hdf5_datasets]
+    train_data_size = train_data[0].shape
+    num_categories = train_data[1].shape[1]
+    train_instances, receptive_field = train_data_size[0], train_data_size[1:]
+    samples_per_training = int(np.ceil(train_instances / train_batch_size))
+    X_trn, Y_prob_trn, Y_offsets_trn = train_data
+    train_generator = data_generator(X_trn, Y_prob_trn, Y_offsets_trn,
+                                     batch_size, train_instances)
+
+    if validation_split > 1:
+        validation_split = int(validation_split)
+    else:
+        validation_split = int(np.ceil((train_instances * validation_split)))
+    validation_data = [HDF5Matrix(filename, i, start=validation_split)
+                       for i in hdf5_datasets]
+    val_instances = validation_data[0].shape[0]
+    samples_per_validation = int(val_instances / val_batch_size)
+    X_val, Y_prob_val, Y_offsets_val = validation_data
+    validation_generator = data_generator(X_val, Y_prob_val, Y_offsets_val,
+                                          val_batch_size, val_instances)
+
+    metadata = (num_categories, receptive_field)
+    argout = (train_generator, validation_generator, samples_per_training,
+              samples_per_validation, metadata)
+    return argout
+
+
+def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS):
+    """Load dataset in memory from HDF5-file
 
     Parameters
     ----------
@@ -90,38 +180,62 @@ def load_dataset(filename, extra_args):
     Returns
     -------
     X : ndarray
-        Features, [num_instances, t_steps, feat_dim]
     Y_labels : ndarray
-        Label matrix [num_instances, n_categories]
     Y_offsets : ndarray
-        Target offsets [num_instances, n_categories * 2]
+    train_samples : int
+    metadata : tuple
+        Extra info about dataset (num-categories, receptive-field)
 
     """
-    train_samples, num_classes = extra_args
+    train_samples, num_classes = 50000, 20
     X = np.random.rand(train_samples, 10, 512)
-    Y_labels = np.eye(num_classes)[np.random.randint(0, num_classes,
-                                                     train_samples), :]
+    Y_labels = np.eye(num_classes)[
+        np.random.randint(0, num_classes, train_samples), :]
     Y_offsets = np.random.rand(train_samples, 2 * num_classes)
-    return X, Y_labels, Y_offsets
+    """
+    if os.path.exists(filename):
+        raise IOError('Unexistent file {}'.format(filename))
+    fid = h5py.File(filename, 'r')
+    X, Y_labels, Y_offsets = [fid[i][...] for i in hdf5_datasets]
+    """
+
+    metadata = Y_labels.shape[1], X.shape[1::]
+    return X, Y_labels, Y_offsets, metadata
 
 
-def main(dataset_file, batch_size, train_samples, validation_split, arch_file,
-         alpha, lr_start, lr_gain, lr_patience, stop_patience, max_epochs,
-         output_dir, verbosity, **kwargs):
+def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
+         arch_file, alpha, lr_start, lr_gain, lr_patience, stop_patience,
+         max_epochs, output_dir, verbosity, **kwargs):
+    # Check output-folder
     initialize_logging(output_dir, inspect.currentframe())
+
     # Read architecture
     with open(arch_file) as fid:
         arch_prm = json.load(fid)
+
     # Load dataset
-    num_classes = 20
-    X, Y_labels, Y_offsets = load_dataset(dataset_file,
-                                          (train_samples, num_classes))
-    num_classes = Y_labels.shape[1]
-    train_samples = min(train_samples, X.shape[0])
-    receptive_field = X.shape[1::]
+    if in_memory:
+        dataset_tuple = load_dataset_in_memory(dataset_file)
+        X, Y_labels, Y_offsets, metadata = dataset_tuple
+        # Small piece of dataset
+        train_samples = min(train_samples, X.shape[0])
+        X, Y_labels, Y_offsets = (X[0:train_samples, ...],
+                                  Y_labels[0:train_samples, ...],
+                                  Y_offsets[0:train_samples, ...])
+        # Set unique batch_size
+        batch_size = batch_size[0]
+        if verbosity > 0:
+            print 'Ignoring validation batch size. Keras limitation.'
+    else:
+        dataset_tuple = load_dataset_by_chunks(
+            dataset_file, batch_size, train_samples, validation_split)
+        (train_generator, validation_generator,
+         samples_per_training, samples_per_validation,
+         metadata) = dataset_tuple
+    num_categories, receptive_field = metadata
 
     # Model instantiation
-    model = neural_context_model(num_classes, receptive_field, arch_prm)
+    model = neural_context_model(num_categories, receptive_field, arch_prm)
     model.compile(optimizer='rmsprop',
                   loss={'output_prob': 'categorical_crossentropy',
                         'output_offsets': 'mse'},
@@ -161,15 +275,21 @@ def main(dataset_file, batch_size, train_samples, validation_split, arch_file,
     # Training
     if verbosity > 0:
         print 'Optimization begins'
-    X, Y_labels, Y_offsets = (X[0:train_samples, ...],
-                              Y_labels[0:train_samples, ...],
-                              Y_offsets[0:train_samples, ...])
-    model.fit(X, {'output_prob': Y_labels, 'output_offsets': Y_offsets},
-              nb_epoch=max_epochs, batch_size=batch_size, shuffle=False,
-              validation_split=validation_split, callbacks=lst_callbacks)
-
+    if in_memory:
+        model.fit(X, {'output_prob': Y_labels, 'output_offsets': Y_offsets},
+                  nb_epoch=max_epochs, batch_size=batch_size, shuffle=False,
+                  validation_split=validation_split, callbacks=lst_callbacks)
+    else:
+        queue_size, max_workers = 1, 4
+        model.fit_generator(
+            train_generator, nb_epoch=max_epochs, callbacks=lst_callbacks,
+            samples_per_epoch=samples_per_training,
+            validation_data=validation_generator,
+            nb_val_samples=samples_per_validation,
+            max_q_size=queue_size, nb_worker=max_workers)
     if verbosity > 0:
         print 'Optimization finished'
+    return None
 
 
 if __name__ == '__main__':
