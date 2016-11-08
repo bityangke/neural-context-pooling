@@ -9,10 +9,11 @@ from keras.callbacks import (CSVLogger, EarlyStopping, ModelCheckpoint,
                              ProgbarLogger, ReduceLROnPlateau)
 from keras.utils.io_utils import HDF5Matrix
 
+from ncp import preprocessing
 from ncp.model import neural_context_model, set_learning_rate
 from ncp.utils import count_wraparound
 
-HDF5_DATASETS = ['X', 'output_prob', 'output_offsets']
+HDF5_DATASETS = ['Representation', 'Labels', 'Targets']
 JSON_ARCH_EXAMPLE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'examples',
     'arch.json')
@@ -134,7 +135,7 @@ def load_dataset_by_chunks(filename, batch_size, train_samples=None,
         Extra info about dataset (num-categories, receptive-field)
 
     """
-    if os.path.exists(filename):
+    if not os.path.exists(filename):
         raise IOError('Unexistent file {}'.format(filename))
     if len(batch_size) > 1:
         train_batch_size, val_batch_size = batch_size[0:1]
@@ -187,18 +188,14 @@ def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS):
         Extra info about dataset (num-categories, receptive-field)
 
     """
-    train_samples, num_classes = 50000, 20
-    X = np.random.rand(train_samples, 10, 512)
-    Y_labels = np.eye(num_classes)[
-        np.random.randint(0, num_classes, train_samples), :]
-    Y_offsets = np.random.rand(train_samples, 2 * num_classes)
-    """
-    if os.path.exists(filename):
+    if not os.path.exists(filename):
         raise IOError('Unexistent file {}'.format(filename))
+
     fid = h5py.File(filename, 'r')
     X, Y_labels, Y_offsets = [fid[i][...] for i in hdf5_datasets]
-    """
 
+    X, Y_labels, Y_offsets = preprocessing.activitynet_parsing(
+        X, Y_labels, Y_offsets)
     metadata = Y_labels.shape[1], X.shape[1::]
     return X, Y_labels, Y_offsets, metadata
 
