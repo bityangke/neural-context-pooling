@@ -11,7 +11,7 @@ from keras.utils.io_utils import HDF5Matrix
 
 from ncp import preprocessing
 from ncp.model import neural_context_model, set_learning_rate
-from ncp.utils import count_wraparound
+from ncp.utils import count_wraparound, category_weighting
 
 HDF5_DATASETS = ['Representation', 'Labels', 'Targets', 'RegressionMask']
 JSON_ARCH_EXAMPLE = os.path.join(
@@ -218,6 +218,10 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
         X, Y_labels, Y_offsets = (X[0:train_samples, ...],
                                   Y_labels[0:train_samples, ...],
                                   Y_offsets[0:train_samples, ...])
+        # weight classes
+        weights = category_weighting(Y_labels)
+        weights = weights / weights.mean()
+        class_weight = dict(zip(xrange(weights.size), weights))
         # Set unique batch_size
         batch_size = batch_size[0]
         if verbosity > 0:
@@ -274,7 +278,8 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
     if in_memory:
         model.fit(X, {'output_prob': Y_labels, 'output_offsets': Y_offsets},
                   nb_epoch=max_epochs, batch_size=batch_size, shuffle=False,
-                  validation_split=validation_split, callbacks=lst_callbacks)
+                  validation_split=validation_split, callbacks=lst_callbacks,
+                  class_weight=class_weight)
     else:
         queue_size, max_workers = 1, 4
         model.fit_generator(
