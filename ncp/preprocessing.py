@@ -3,19 +3,23 @@ import numpy as np
 FEAT_DIM = 440
 
 
-def activitynet_parsing(representation, labels, targets):
+def activitynet_parsing(representation, labels, targets, mask):
     """Reshape provided data
+
+    Notes
+    -----
+    1. Assume labels are 0-indexed
+
     """
     n_instances, temporal_feat_dim = representation.shape
-    n_categories = labels.max() + 1
+    n_categories = labels.max() + 2  # Extra class for background
     n_targets = targets.shape[1]
     if temporal_feat_dim % FEAT_DIM != 0:
         print 'Weird dataset!\nRunning at ur risk'
 
-    # Focus on fine scale in the meantime
-    fine_scale_start_idx = 3 * FEAT_DIM
+    # Reshape tensor
     tensor_shape = (n_instances, -1, FEAT_DIM)
-    X = representation[:, fine_scale_start_idx::].reshape(tensor_shape)
+    X = representation.reshape(tensor_shape)
 
     # target as sparse matrix
     Y_offsets = np.zeros((n_instances, n_targets * n_categories))
@@ -25,5 +29,6 @@ def activitynet_parsing(representation, labels, targets):
                    idx_label_offset + i)] = targets[:, i]
 
     # label matrix
+    labels[mask < 0.5] = n_categories - 1
     Y_labels = np.eye(n_categories)[labels]
     return X, Y_labels, Y_offsets

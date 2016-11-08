@@ -56,7 +56,7 @@ def neural_context_model(num_actions, receptive_field, arch_prm):
     input_src = Input(shape=receptive_field, name='context_over_time')
     model = neural_context_encoder(arch_prm, receptive_field)
     encoded_input = model(input_src)
-    output_prob = Dense(num_actions, activation='sigmoid',
+    output_prob = Dense(num_actions, activation='softmax',
                         name='output_prob')(encoded_input)
     output_offsets = Dense(2 * num_actions,
                            name='output_offsets')(encoded_input)

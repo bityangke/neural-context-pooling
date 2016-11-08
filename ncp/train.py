@@ -13,7 +13,7 @@ from ncp import preprocessing
 from ncp.model import neural_context_model, set_learning_rate
 from ncp.utils import count_wraparound
 
-HDF5_DATASETS = ['Representation', 'Labels', 'Targets']
+HDF5_DATASETS = ['Representation', 'Labels', 'Targets', 'RegressionMask']
 JSON_ARCH_EXAMPLE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'examples',
     'arch.json')
@@ -192,10 +192,9 @@ def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS):
         raise IOError('Unexistent file {}'.format(filename))
 
     fid = h5py.File(filename, 'r')
-    X, Y_labels, Y_offsets = [fid[i][...] for i in hdf5_datasets]
+    dataset = [fid[i][...] for i in hdf5_datasets]
 
-    X, Y_labels, Y_offsets = preprocessing.activitynet_parsing(
-        X, Y_labels, Y_offsets)
+    X, Y_labels, Y_offsets = preprocessing.activitynet_parsing(*dataset)
     metadata = Y_labels.shape[1], X.shape[1::]
     return X, Y_labels, Y_offsets, metadata
 
