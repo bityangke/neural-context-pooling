@@ -66,6 +66,27 @@ def neural_context_model(num_actions, receptive_field, arch_prm):
     return model
 
 
+def neural_context_shallow_model(num_actions, receptive_field):
+    """Instanciate Keras model
+
+    Parameters
+    ----------
+    num_actions : int
+    receptive_field : tuple
+
+    """
+    input_src = Input(shape=receptive_field, name='context_over_time')
+    input_flattened = Flatten()(input_src)
+    output_prob = Dense(num_actions,
+                        name='output_prob')(input_flattened)
+    output_offsets = Dense(2 * num_actions,
+                           name='output_offsets')(input_flattened)
+
+    model = Model(input=[input_src],
+                  output=[output_prob, output_offsets])
+    return model
+
+
 def set_learning_rate(model, lr_start):
     """Set learning rate
 

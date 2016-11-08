@@ -10,7 +10,8 @@ from keras.callbacks import (CSVLogger, EarlyStopping, ModelCheckpoint,
 from keras.utils.io_utils import HDF5Matrix
 
 from ncp import preprocessing
-from ncp.model import neural_context_model, set_learning_rate
+from ncp.model import (neural_context_model, neural_context_shallow_model,
+                       set_learning_rate)
 from ncp.utils import count_wraparound, category_weighting
 
 HDF5_DATASETS = ['Representation', 'Labels', 'Targets', 'RegressionMask']
@@ -235,16 +236,25 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
     num_categories, receptive_field = metadata
 
     # Model instantiation
-    model = neural_context_model(num_categories, receptive_field, arch_prm)
-    model.compile(optimizer='rmsprop',
-                  loss={'output_prob': 'categorical_crossentropy',
-                        'output_offsets': 'mse'},
-                  loss_weights={'output_prob': 1.,
-                                'output_offsets': alpha},
-                  metrics={'output_prob': 'categorical_accuracy',
-                           'output_offsets': 'mean_absolute_error'})
+    if True:
+        model = neural_context_shallow_model(num_categories, receptive_field)
+        model.compile(optimizer='rmsprop',
+                      loss={'output_prob': 'hinge',
+                            'output_offsets': 'mse'},
+                      loss_weights={'output_prob': 1.,
+                                    'output_offsets': alpha},
+                      metrics={'output_prob': 'categorical_accuracy',
+                               'output_offsets': 'mean_absolute_error'})
+    else:
+        model = neural_context_model(num_categories, receptive_field, arch_prm)
+        model.compile(optimizer='rmsprop',
+                      loss={'output_prob': 'categorical_crossentropy',
+                            'output_offsets': 'mse'},
+                      loss_weights={'output_prob': 1.,
+                                    'output_offsets': alpha},
+                      metrics={'output_prob': 'categorical_accuracy',
+                               'output_offsets': 'mean_absolute_error'})
     set_learning_rate(model, lr_start)
-    # Initialize model weights: Do you need that?
 
     # Callbacks instantiation
     var_monitored = 'val_output_prob_categorical_accuracy'
@@ -277,7 +287,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
         print 'Optimization begins'
     if in_memory:
         model.fit(X, {'output_prob': Y_labels, 'output_offsets': Y_offsets},
-                  nb_epoch=max_epochs, batch_size=batch_size, shuffle=False,
+                  nb_epoch=max_epochs, batch_size=batch_size, shuffle=True,
                   validation_split=validation_split, callbacks=lst_callbacks,
                   class_weight=class_weight)
     else:
