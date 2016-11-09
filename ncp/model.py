@@ -1,5 +1,6 @@
 from keras.layers import Input, Conv1D, Dense, Flatten, MaxPooling1D
 from keras.models import Model, Sequential
+from keras.regularizers import l2
 from keras import backend as K
 
 
@@ -77,7 +78,7 @@ def neural_context_shallow_model(num_actions, receptive_field):
     """
     input_src = Input(shape=receptive_field, name='context_over_time')
     input_flattened = Flatten()(input_src)
-    output_prob = Dense(num_actions,
+    output_prob = Dense(num_actions, W_regularizer=l2(1e-5),
                         name='output_prob')(input_flattened)
     output_offsets = Dense(2 * num_actions,
                            name='output_offsets')(input_flattened)
