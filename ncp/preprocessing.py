@@ -30,6 +30,11 @@ def activitynet_parsing(representation, labels, targets, mask):
     representation, labels, targets, mask = (
         i[idx_shuffle, ...] for i in [representation, labels, targets, mask])
 
+    # representation
+    # L2-normalization
+    l2_norm = np.expand_dims(np.sqrt((representation**2).sum(axis=1)), 1)
+    l2_norm[l2_norm == 0] = 1.0
+    representation = representation / l2_norm
     # Reshape tensor
     tensor_shape = (n_instances, -1, FEAT_DIM)
     X = representation.reshape(tensor_shape)
