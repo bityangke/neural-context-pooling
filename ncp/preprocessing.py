@@ -11,11 +11,24 @@ def activitynet_parsing(representation, labels, targets, mask):
     1. Assume labels are 0-indexed
 
     """
+    # Remove nan if any
+    idx_rm = np.isnan(representation).sum(axis=1) > 1
+    if idx_rm.sum() > 1:
+        print 'KaBOOM!!! Houston: dataset contains NaN values'
+        representation, labels, targets, mask = (
+            i[~idx_rm, ...] for i in [representation, labels, targets, mask])
+
+    # Collect metadata
     n_instances, temporal_feat_dim = representation.shape
     n_categories = labels.max() + 2  # Extra class for background
     n_targets = targets.shape[1]
     if temporal_feat_dim % FEAT_DIM != 0:
         print 'Weird dataset!\nRunning at ur risk'
+
+    # Shuffling
+    idx_shuffle = np.random.permutation(n_instances)
+    representation, labels, targets, mask = (
+        i[idx_shuffle, ...] for i in [representation, labels, targets, mask])
 
     # Reshape tensor
     tensor_shape = (n_instances, -1, FEAT_DIM)
