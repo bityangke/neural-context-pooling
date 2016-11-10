@@ -45,6 +45,12 @@ def input_parser(p=None):
     # Architecture
     p.add_argument('-af', '--arch-file', nargs='?', default=JSON_ARCH_EXAMPLE,
                    help='JSON-file to modify architecture')
+    shallow_parser = p.add_mutually_exclusive_group(required=False)
+    shallow_parser.add_argument('-asm', '--arch-shallow', action='store_true',
+                                help='Dataset fits in memory')
+    dmem_parser.add_argument('-nasm', '--no-arch-shallow',
+                             dest='arch_shallow', action='store_false')
+    dmem_parser.set_defaults(arch_shallow=False)
     # Optimization parameters
     p.add_argument('-oa', '--alpha', default=0.2, type=float,
                    help='Weight contribution btw refinement and prediction')
@@ -201,8 +207,8 @@ def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS):
 
 
 def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
-         arch_file, alpha, lr_start, lr_gain, lr_patience, stop_patience,
-         max_epochs, output_dir, verbosity, **kwargs):
+         arch_file, arch_shallow, alpha, lr_start, lr_gain, lr_patience,
+         stop_patience, max_epochs, output_dir, verbosity, **kwargs):
     # Check output-folder
     initialize_logging(output_dir, inspect.currentframe())
 
@@ -236,7 +242,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
     num_categories, receptive_field = metadata
 
     # Model instantiation
-    if True:
+    if arch_shallow:
         model = neural_context_shallow_model(num_categories, receptive_field)
         model.compile(optimizer='rmsprop',
                       loss={'output_prob': 'hinge',

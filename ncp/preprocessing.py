@@ -3,7 +3,7 @@ import numpy as np
 FEAT_DIM = 440
 
 
-def activitynet_parsing(representation, labels, targets, mask):
+def activitynet_parsing(representation, labels, targets, mask, l2_norm=False):
     """Reshape provided data
 
     Notes
@@ -32,9 +32,10 @@ def activitynet_parsing(representation, labels, targets, mask):
 
     # representation
     # L2-normalization
-    l2_norm = np.expand_dims(np.sqrt((representation**2).sum(axis=1)), 1)
-    l2_norm[l2_norm == 0] = 1.0
-    representation = representation / l2_norm
+    if l2_norm:
+        l2_norm = np.expand_dims(np.sqrt((representation**2).sum(axis=1)), 1)
+        l2_norm[l2_norm == 0] = 1.0
+        representation = representation / l2_norm
     # Reshape tensor
     tensor_shape = (n_instances, -1, FEAT_DIM)
     X = representation.reshape(tensor_shape)

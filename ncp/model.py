@@ -29,7 +29,7 @@ def neural_context_encoder(arch_prm, input_shape):
 
                 nce_md.add(Conv1D(num_units, filter_size, name=c_unit_name,
                                   border_mode='same', activation='relu',
-                                  **init_shape))
+                                  init='he_uniform', **init_shape))
                 if first_layer:
                     init_shape = {}
                     first_layer = False
