@@ -4,7 +4,7 @@
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
 # Add source to PYTHONPATH
-export PYTHONPATH=$DIR:PYTHONPATH
+export PYTHONPATH=$DIR:$PYTHONPATH
 
 # Load requirements with module-environment
 module purge
