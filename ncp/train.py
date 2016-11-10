@@ -48,9 +48,9 @@ def input_parser(p=None):
     shallow_parser = p.add_mutually_exclusive_group(required=False)
     shallow_parser.add_argument('-asm', '--arch-shallow', action='store_true',
                                 help='Dataset fits in memory')
-    dmem_parser.add_argument('-nasm', '--no-arch-shallow',
-                             dest='arch_shallow', action='store_false')
-    dmem_parser.set_defaults(arch_shallow=False)
+    shallow_parser.add_argument('-nasm', '--no-arch-shallow',
+                                dest='arch_shallow', action='store_false')
+    shallow_parser.set_defaults(arch_shallow=False)
     # Optimization parameters
     p.add_argument('-oa', '--alpha', default=0.2, type=float,
                    help='Weight contribution btw refinement and prediction')
