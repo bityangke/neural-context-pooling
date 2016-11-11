@@ -307,7 +307,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
         model.fit(X, {'output_prob': Y_labels, 'output_offsets': Y_offsets},
                   nb_epoch=max_epochs, batch_size=batch_size, shuffle=True,
                   validation_split=validation_split, callbacks=lst_callbacks,
-                  class_weight=class_weight)
+                  class_weight=class_weight, verbose=2)
     else:
         queue_size, max_workers = 1, 4
         model.fit_generator(
@@ -315,7 +315,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
             samples_per_epoch=samples_per_training,
             validation_data=validation_generator,
             nb_val_samples=samples_per_validation,
-            max_q_size=queue_size, nb_worker=max_workers)
+            max_q_size=queue_size, nb_worker=max_workers, verbose=2)
     if verbosity > 0:
         print 'Optimization finished'
     return None
