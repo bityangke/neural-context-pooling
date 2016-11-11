@@ -3,7 +3,8 @@ import numpy as np
 FEAT_DIM = 440
 
 
-def activitynet_parsing(representation, labels, targets, mask, l2_norm=False):
+def activitynet_parsing(representation, labels, targets, mask, l2_norm=False,
+                        std_scaling=True):
     """Reshape provided data
 
     Notes
@@ -39,6 +40,10 @@ def activitynet_parsing(representation, labels, targets, mask, l2_norm=False):
     # Reshape tensor
     tensor_shape = (n_instances, -1, FEAT_DIM)
     X = representation.reshape(tensor_shape)
+    # zero mean & unit variance per time step
+    if std_scaling:
+        mu, std = standard_scaling_1d_parameters(X)
+        X = (X - mu) / std
 
     # target as sparse matrix
     Y_offsets = np.zeros((n_instances, n_targets * n_categories))
@@ -51,3 +56,39 @@ def activitynet_parsing(representation, labels, targets, mask, l2_norm=False):
     labels[mask < 0.5] = n_categories - 1
     Y_labels = np.eye(n_categories)[labels]
     return X, Y_labels, Y_offsets
+
+
+def standard_scaling_1d_parameters(X, axis=0):
+    """Compute mean and standard deviation for 3D tensor
+
+    Parameters
+    ----------
+    X : ndarray
+        3dim tensor
+    axis : int
+        dimension to scale
+
+    Returns
+    -------
+    mean : ndarray
+        3dim tensor
+    std : ndarray
+        3dim tensor
+
+    """
+    shape, sum_axes = list(X.shape), range(X.ndim)
+    del sum_axes[axis]
+    del shape[axis]
+    sum_axes = tuple(sum_axes)
+    reshape_for_output = [1] * X.ndim
+    reshape_for_output[axis] = -1
+    N = np.prod(shape)
+
+    mean = X.sum(axis=sum_axes)
+    mean = (mean/N).reshape(reshape_for_output)
+
+    std = (X - mean)**2
+    std = std.sum(axis=sum_axes)
+    std = (std/(N - 1)).reshape(reshape_for_output)
+    std[std == 0] = 1.0
+    return mean, std
