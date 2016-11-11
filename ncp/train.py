@@ -42,6 +42,12 @@ def input_parser(p=None):
     p.add_argument('-dvs', '--validation-split', default=0.2, type=float,
                    help=('Ratio of samples (last) from training used as '
                          'validation'))
+    zmuv_parser = p.add_mutually_exclusive_group(required=False)
+    zmuv_parser.add_argument('-dss', '--std-scaling', action='store_true',
+                             help='Perform zero-mean and unit variance')
+    zmuv_parser.add_argument('-ndss', '--no-std-scaling',
+                             dest='std_scaling', action='store_false')
+    zmuv_parser.set_defaults(std_scaling=False)
     # Architecture
     p.add_argument('-af', '--arch-file', nargs='?', default=JSON_ARCH_EXAMPLE,
                    help='JSON-file to modify architecture')
@@ -177,13 +183,16 @@ def load_dataset_by_chunks(filename, batch_size, train_samples=None,
     return argout
 
 
-def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS):
+def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS,
+                           std_scaling=True):
     """Load dataset in memory from HDF5-file
 
     Parameters
     ----------
     filename : str
         fullpath of hdf5 file
+    std_scaling : bool
+        Enable zero mean and unit variance scaling
 
     Returns
     -------
@@ -201,14 +210,16 @@ def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS):
     fid = h5py.File(filename, 'r')
     dataset = [fid[i][...] for i in hdf5_datasets]
 
-    X, Y_labels, Y_offsets = preprocessing.activitynet_parsing(*dataset)
+    X, Y_labels, Y_offsets = preprocessing.activitynet_parsing(
+        *dataset, std_scaling=std_scaling)
     metadata = Y_labels.shape[1], X.shape[1::]
     return X, Y_labels, Y_offsets, metadata
 
 
 def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
-         arch_file, arch_shallow, alpha, lr_start, lr_gain, lr_patience,
-         stop_patience, max_epochs, output_dir, verbosity, **kwargs):
+         std_scaling, arch_file, arch_shallow, alpha, lr_start, lr_gain,
+         lr_patience, stop_patience, max_epochs, output_dir, verbosity,
+         **kwargs):
     # Check output-folder
     initialize_logging(output_dir, inspect.currentframe())
 
@@ -218,7 +229,8 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
 
     # Load dataset
     if in_memory:
-        dataset_tuple = load_dataset_in_memory(dataset_file)
+        dataset_tuple = load_dataset_in_memory(
+            dataset_file, std_scaling=std_scaling)
         X, Y_labels, Y_offsets, metadata = dataset_tuple
         # Small piece of dataset
         train_samples = min(train_samples, X.shape[0])
@@ -285,7 +297,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
     lst_callbacks += [
         CSVLogger(trainlog, separator=' ')]
 
-    if verbosity > 0:
+    if verbosity > 1:
         lst_callbacks += [ProgbarLogger()]
 
     # Training
