@@ -1,4 +1,5 @@
-from keras.layers import Input, Conv1D, Dense, Flatten, MaxPooling1D
+from keras.layers import (Activation, BatchNormalization, Conv1D, Dense,
+                          Dropout, Flatten, Input, MaxPooling1D)
 from keras.models import Model, Sequential
 from keras.regularizers import l2
 from keras import backend as K
@@ -13,26 +14,32 @@ def neural_context_encoder(arch_prm, input_shape):
 
     """
     first_layer = True
-    init_shape = dict(input_shape=input_shape)
     combo_list, after_combo = arch_prm['combo_list'], arch_prm['after_combo']
 
     nce_md = Sequential()
     if arch_prm['type'] == 'conv':
         for i, combo in enumerate(combo_list):
             for j, c_unit in enumerate(combo):
-                c_unit_name = 'conv{}_{}'.format(i, j)
-                num_units, filter_size = 16, 3
-                if 'num_units' in c_unit:
-                    num_units = c_unit['num_units']
-                if 'filter_size' in c_unit:
-                    filter_size = c_unit['filter_size']
+                c_unit['kwargs']['name'] = 'conv{}_{}'.format(i, j)
+                c_unit['kwargs']['border_mode'] = 'same'
+                c_unit['kwargs']['init'] = 'he_uniform'
+                if 'activation' not in c_unit['kwargs']:
+                    c_unit['kwargs']['activation'] = 'relu'
 
-                nce_md.add(Conv1D(num_units, filter_size, name=c_unit_name,
-                                  border_mode='same', activation='relu',
-                                  init='he_uniform', **init_shape))
                 if first_layer:
-                    init_shape = {}
+                    c_unit['kwargs']['input_shape'] = input_shape
                     first_layer = False
+
+                nce_md.add(Conv1D(*c_unit['args'], **c_unit['kwargs']))
+
+                if 'batchnorm' in c_unit:
+                    nce_md.add(BatchNormalization(**c_unit['batchnorm']))
+
+                if 'activation' in c_unit:
+                    nce_md.add(Activation(c_unit['activation']))
+
+                if 'dropout' in c_unit:
+                    nce_md.add(Dropout(c_unit['dropout']))
 
             if 'max-pool' in after_combo[i]:
                 pooling_prm = after_combo[i]['max-pool']
