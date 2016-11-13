@@ -26,6 +26,9 @@ def input_parser(p=None):
     if p is None:
         p = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # Model file
+    p.add_argument('-md', '--modelfile', default='non-existent.hdf5',
+                   help='HDF5-file with weights from model to evaluate')
     # Batch/Dataset parameters
     p.add_argument('-dh5', '--dataset-file', default='awesome-dataset.hdf5',
                    help='HDF5-file with dataset')
@@ -216,10 +219,10 @@ def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS,
     return X, Y_labels, Y_offsets, metadata
 
 
-def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
-         std_scaling, arch_file, arch_shallow, alpha, lr_start, lr_gain,
-         lr_patience, stop_patience, max_epochs, output_dir, verbosity,
-         **kwargs):
+def main(modelfile, dataset_file, in_memory, batch_size, train_samples,
+         validation_split, std_scaling, arch_file, arch_shallow, alpha,
+         lr_start, lr_gain, lr_patience, stop_patience, max_epochs, output_dir,
+         verbosity, **kwargs):
     # Check output-folder
     initialize_logging(output_dir, inspect.currentframe())
 
@@ -241,10 +244,20 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
         X, Y_labels, Y_offsets = (X[0:train_samples, ...],
                                   Y_labels[0:train_samples, ...],
                                   Y_offsets[0:train_samples, ...])
-        # weight classes
-        weights = category_weighting(Y_labels)
-        weights = weights / weights.mean()
-        class_weight = dict(zip(xrange(weights.size), weights))
+
+        # Weight per samples
+        # class-distrution for classification
+        class_weight_arr = category_weighting(Y_labels)
+        class_weight_arr /= class_weight_arr.mean()
+        num_categories = metadata[0]
+        y_label_vector = np.dot(
+            Y_labels, np.arange(num_categories).reshape((-1, 1)))
+        sample_weights_cls = np.reshape(
+            class_weight_arr[y_label_vector.astype(int)], (-1))
+
+        # Ignore regression for background
+        sample_weights_reg = 1.0*(Y_labels[:, -1] < 0.5)
+
         # Set unique batch_size
         batch_size = batch_size[0]
         if verbosity > 0:
@@ -276,6 +289,12 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
                             'output_offsets': 'mse'})
     set_learning_rate(model, lr_start)
 
+    # Loading model (if any)
+    if os.path.isfile(modelfile):
+        if verbosity > 0:
+            print 'Loading weights'
+        model.load_weights(modelfile)
+
     # Callbacks instantiation
     var_monitored = 'val_output_prob_categorical_accuracy'
     lst_callbacks = []
@@ -293,7 +312,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
     lst_callbacks += [
         ModelCheckpoint(
             filepath, monitor=var_monitored, verbose=1, save_best_only=True,
-            save_weights_only=True, mode='auto')]
+            save_weights_only=False, mode='auto')]
 
     trainlog = os.path.join(output_dir, 'train.log')
     lst_callbacks += [
@@ -309,7 +328,9 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
         model.fit(X, {'output_prob': Y_labels, 'output_offsets': Y_offsets},
                   nb_epoch=max_epochs, batch_size=batch_size, shuffle=True,
                   validation_split=validation_split, callbacks=lst_callbacks,
-                  class_weight=class_weight, verbose=2)
+                  verbose=2,
+                  sample_weight={'output_prob': sample_weights_cls,
+                                 'output_offsets': sample_weights_reg})
     else:
         queue_size, max_workers = 20, 10
         model.fit_generator(
