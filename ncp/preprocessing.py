@@ -3,8 +3,8 @@ import numpy as np
 FEAT_DIM = 440
 
 
-def activitynet_parsing(representation, labels, targets, mask, shuffle=False,
-                        l2_norm=False, reshape=True, std_scaling=True):
+def activitynet_parsing(representation, labels, targets, mask,
+                        std_scaling=True, l2_norm=False):
     """Pre-processing done in ActivityNet data
 
     Notes
@@ -27,27 +27,19 @@ def activitynet_parsing(representation, labels, targets, mask, shuffle=False,
     if temporal_feat_dim % FEAT_DIM != 0:
         print 'Weird dataset!\nRunning at ur risk'
 
-    # Shuffling
-    if shuffle:
-        idx_shuffle = np.random.permutation(n_instances)
-        representation, labels, targets, mask = (
-            i[idx_shuffle, ...] for i in [representation, labels,
-                                          targets, mask])
-
     # representation
     # L2-normalization
     if l2_norm:
         l2_norm = np.expand_dims(np.sqrt((representation**2).sum(axis=1)), 1)
         l2_norm[l2_norm == 0] = 1.0
         representation = representation / l2_norm
-    # Reshape tensor
-    if reshape:
-        tensor_shape = (n_instances, -1, FEAT_DIM)
-        X = representation.reshape(tensor_shape)
-    # zero mean & unit variance per time step
-    if std_scaling and reshape:
+    # Reshape tensor (None, time-steps, feat-dim)
+    tensor_shape = (n_instances, -1, FEAT_DIM)
+    X = representation.reshape(tensor_shape)
+    # zero mean & unit variance per context map
+    if std_scaling:
         up_to = int(train_split * n_instances)
-        mu, std = standard_scaling_1d_parameters(X[0:up_to, ...], axis=1)
+        mu, std = standard_scaling_1d_parameters(X[0:up_to, ...], axis=2)
         X = (X - mu) / std
 
     # target as sparse matrix

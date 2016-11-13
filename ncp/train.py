@@ -184,7 +184,7 @@ def load_dataset_by_chunks(filename, batch_size, train_samples=None,
 
 
 def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS,
-                           std_scaling=True):
+                           std_scaling=True, l2_norm=False):
     """Load dataset in memory from HDF5-file
 
     Parameters
@@ -211,7 +211,7 @@ def load_dataset_in_memory(filename, hdf5_datasets=HDF5_DATASETS,
     dataset = [fid[i][...] for i in hdf5_datasets]
 
     X, Y_labels, Y_offsets = preprocessing.activitynet_parsing(
-        *dataset, std_scaling=std_scaling)
+        *dataset, std_scaling=std_scaling, l2_norm=l2_norm)
     metadata = Y_labels.shape[1], X.shape[1::]
     return X, Y_labels, Y_offsets, metadata
 
@@ -229,8 +229,12 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
 
     # Load dataset
     if in_memory:
+        extra_kwargs = {}
+        if arch_shallow:
+            extra_kwargs = dict(l2_norm=True)
+
         dataset_tuple = load_dataset_in_memory(
-            dataset_file, std_scaling=std_scaling)
+            dataset_file, std_scaling=std_scaling, **extra_kwargs)
         X, Y_labels, Y_offsets, metadata = dataset_tuple
         # Small piece of dataset
         train_samples = min(train_samples, X.shape[0])
@@ -254,24 +258,22 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
     num_categories, receptive_field = metadata
 
     # Model instantiation
+    # loss_weights (balance btw classification and regression)
+    optimizer = 'rmsprop'
+    loss_weights = {'output_prob': 1., 'output_offsets': alpha}
+    metrics = {'output_prob': 'categorical_accuracy',
+               'output_offsets': 'mean_absolute_error'}
     if arch_shallow:
         model = neural_context_shallow_model(num_categories, receptive_field)
-        model.compile(optimizer='rmsprop',
-                      loss={'output_prob': 'hinge',
-                            'output_offsets': 'mse'},
-                      loss_weights={'output_prob': 1.,
-                                    'output_offsets': alpha},
-                      metrics={'output_prob': 'categorical_accuracy',
-                               'output_offsets': 'mean_absolute_error'})
+        model.compile(optimizer=optimizer, loss_weights=loss_weights,
+                      metrics=metrics,
+                      loss={'output_prob': 'hinge', 'output_offsets': 'mse'})
     else:
         model = neural_context_model(num_categories, receptive_field, arch_prm)
-        model.compile(optimizer='rmsprop',
+        model.compile(optimizer=optimizer, loss_weights=loss_weights,
+                      metrics=metrics,
                       loss={'output_prob': 'categorical_crossentropy',
-                            'output_offsets': 'mse'},
-                      loss_weights={'output_prob': 1.,
-                                    'output_offsets': alpha},
-                      metrics={'output_prob': 'categorical_accuracy',
-                               'output_offsets': 'mean_absolute_error'})
+                            'output_offsets': 'mse'})
     set_learning_rate(model, lr_start)
 
     # Callbacks instantiation
@@ -309,7 +311,7 @@ def main(dataset_file, in_memory, batch_size, train_samples, validation_split,
                   validation_split=validation_split, callbacks=lst_callbacks,
                   class_weight=class_weight, verbose=2)
     else:
-        queue_size, max_workers = 1, 4
+        queue_size, max_workers = 20, 10
         model.fit_generator(
             train_generator, nb_epoch=max_epochs, callbacks=lst_callbacks,
             samples_per_epoch=samples_per_training,
