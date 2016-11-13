@@ -74,8 +74,6 @@ def main(modelfile, dataset_file, idx_start, idx_end, batch_size, l2_norm,
 
     # Model instantiation
     # loss_weights (balance btw classification and regression)
-    metrics = {'output_prob': 'top_k_categorical_accuracy',
-               'output_offsets': 'mean_absolute_error'}
     if arch_shallow:
         model = neural_context_shallow_model(num_categories, receptive_field)
     else:
@@ -83,7 +81,7 @@ def main(modelfile, dataset_file, idx_start, idx_end, batch_size, l2_norm,
 
     if verbosity > 0:
         print 'Compiling model'
-    model.compile(optimizer='rmsprop', metrics=metrics,
+    model.compile(optimizer='rmsprop',
                   loss={'output_prob': 'categorical_crossentropy',
                         'output_offsets': 'mse'})
     if verbosity > 0:
@@ -99,8 +97,7 @@ def main(modelfile, dataset_file, idx_start, idx_end, batch_size, l2_norm,
     if verbosity > 0:
         print 'Evaluation finished'
 
-    return (outputs_pred, {'output_prob_true': Y_labels,
-                           'output_offsets_true': Y_offsets})
+    return outputs_pred, (Y_labels, Y_offsets)
 
 
 if __name__ == '__main__':
